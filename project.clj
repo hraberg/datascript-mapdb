@@ -4,6 +4,6 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.8.0-alpha5"]
-                 [datascript "0.13.2"]
+                 [datascript "0.13.3"]
                  [org.mapdb/mapdb "2.0-beta12"]]
   :pedantic? :abort)
