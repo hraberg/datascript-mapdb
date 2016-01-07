@@ -98,7 +98,8 @@
 (defn new-mapdb-file [file]
   (-> (DBMaker/newFileDB (File. file))
       .transactionDisable
-      .fileMmapEnable
+      .closeOnJvmShutdown
+      .fileMmapEnableIfSupported
       .make))
 
 (comment
