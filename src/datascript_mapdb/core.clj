@@ -1,5 +1,6 @@
 (ns datascript-mapdb.core
-  (:require [datascript.btset :as btset]
+  (:require [clojure.edn :as edn]
+            [datascript.btset :as btset]
             [datascript.core :as d]
             [datascript.db :as db])
   (:import [org.mapdb BTreeKeySerializer$BasicKeySerializer Serializer DBMaker]
@@ -19,7 +20,8 @@
       (.writeUTF out (pr-str value)))
 
     (deserialize [^DataInput in available]
-      (read-string (.readUTF in)))
+      (edn/read-string {:readers d/data-readers}
+                       (.readUTF in)))
 
     (isTrusted [] true)))
 
