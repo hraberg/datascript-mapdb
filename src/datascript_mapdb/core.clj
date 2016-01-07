@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [datascript.db :as db])
   (:import [org.mapdb BTreeKeySerializer$BasicKeySerializer Serializer DBMaker]
+           [datascript.db Datom]
            [java.io DataInput DataOutput File]
            [java.util NavigableSet]))
 
@@ -14,20 +15,28 @@
                             db/cmp-datoms-aevt :aevt
                             db/cmp-datoms-avet :avet})
 
-(def edn-mapdb-serializer
+(def datom-mapdb-serializer
   (proxy [Serializer] []
-    (serialize [^DataOutput out value]
-      (.writeUTF out (pr-str value)))
+    (serialize [^DataOutput out ^Datom value]
+      (.writeLong out (.-e value))
+      (.writeUTF out (name (.-a value)))
+      (.writeUTF out (pr-str (.-v value)))
+      (.writeLong out (.-tx value))
+      (.writeBoolean out (.-added value)))
 
     (deserialize [^DataInput in available]
-      (edn/read-string {:readers d/data-readers}
-                       (.readUTF in)))
+      (db/->Datom
+       (.readLong in)
+       (keyword (.readUTF in))
+       (edn/read-string (.readUTF in))
+       (.readLong in)
+       (.readBoolean in)))
 
     (isTrusted [] true)))
 
 (defn mapdb-btset-by [mapdb cmp]
   (.treeSet mapdb (name (datascript-cmp->index cmp))
-            (BTreeKeySerializer$BasicKeySerializer. edn-mapdb-serializer cmp)))
+            (BTreeKeySerializer$BasicKeySerializer. datom-mapdb-serializer cmp)))
 
 (defn mapdb-btset-slice
   ([set key]
