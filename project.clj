@@ -3,7 +3,11 @@
   :url "http://github.com/hraberg/datascript-mapdb"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure "1.8.0-alpha5"]
+  :dependencies [[org.clojure/clojure "1.8.0-RC5"]
                  [datascript "0.13.3"]
-                 [org.mapdb/mapdb "2.0-beta12"]]
-  :pedantic? :abort)
+                 [org.mapdb/mapdb "2.0-beta12"]
+                 [com.taoensso/nippy "2.11.0-beta1"]]
+  :pedantic? :abort
+  :global-vars {*warn-on-reflection* true
+                *unchecked-math* :warn-on-boxed}
+  :jvm-opts ^:replace [])
