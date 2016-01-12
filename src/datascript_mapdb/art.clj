@@ -24,7 +24,7 @@
       (recur (inc idx) (insert node (aget keys idx) (aget nodes idx)))
       node)))
 
-(defn insert-helper [size ^"[B" keys ^objects nodes key-byte value make-node grow-node]
+(defn insert-helper [size ^"[B" keys ^objects nodes key-byte value make-node empty-larger-node]
   (let [pos (key-position size keys key-byte)
         new-keys (aclone keys)
         new-nodes (aclone nodes)
@@ -40,12 +40,12 @@
               (aset new-nodes idx (aget nodes (dec idx)))
               (recur (inc idx))))
           (make-node (inc (long size)) new-keys new-nodes))
-        (insert (grow-helper size keys nodes (grow-node)) key-byte value))
+        (insert (grow-helper size keys nodes empty-larger-node) key-byte value))
       (make-node size
                  (doto new-keys (aset pos (byte key-byte)))
                  (doto new-nodes (aset pos value))))))
 
-(declare make-node16 make-node48 make-node256)
+(declare empty-node16 empty-node48 empty-node256)
 
 ;; Path compression should happen here when size is one.
 (defrecord Node4 [^long size ^"[B" keys ^objects nodes]
@@ -54,7 +54,7 @@
     (lookup-helper size keys nodes key-byte))
 
   (insert [this key-byte value]
-    (insert-helper size keys nodes key-byte value ->Node4 make-node16)))
+    (insert-helper size keys nodes key-byte value ->Node4 empty-node16)))
 
 (defrecord Node16 [^long size ^"[B" keys ^objects nodes]
   ARTNode
@@ -62,7 +62,7 @@
     (lookup-helper size keys nodes key-byte))
 
   (insert [this key-byte value]
-    (insert-helper size keys nodes key-byte value ->Node16 make-node48)))
+    (insert-helper size keys nodes key-byte value ->Node16 empty-node48)))
 
 (defrecord Node48 [^long size ^"[B" key-index ^objects nodes]
   ARTNode
@@ -79,12 +79,12 @@
                       size
                       idx))]
       (if (< idx capacity)
-        (make-node48 (cond-> idx
-                       new-key? inc)
-                     (doto (aclone key-index) (aset (byte key-byte) idx))
-                     (doto (aclone nodes) (aset idx value)))
+        (->Node48 (cond-> idx
+                    new-key? inc)
+                  (doto (aclone key-index) (aset (byte key-byte) idx))
+                  (doto (aclone nodes) (aset idx value)))
         (loop [key 0
-               node (make-node256)]
+               node empty-node256]
           (if (< key (count key-index))
             (let [idx (aget key-index key)]
               (recur (inc key) (cond-> node
@@ -101,17 +101,13 @@
                  (nil? (aget nodes key-byte)) inc)
                (doto (aclone nodes) (aset key-byte value)))))
 
-(defn make-node4 []
-  (->Node4 0 (byte-array 4 (byte 4)) (object-array 4)))
+(def empty-node4 (->Node4 0 (byte-array 4 (byte 4)) (object-array 4)))
 
-(defn make-node16 []
-  (->Node16 0 (byte-array 16 (byte 16)) (object-array 16)))
+(def empty-node16 (->Node16 0 (byte-array 16 (byte 16)) (object-array 16)))
 
-(defn make-node48 []
-  (->Node48 0 (byte-array 256 (byte 48)) (object-array 48)))
+(def empty-node48 (->Node48 0 (byte-array 256 (byte 48)) (object-array 48)))
 
-(defn make-node256 []
-  (->Node256 0 (object-array 256)))
+(def empty-node256 (->Node256 0 (object-array 256)))
 
 (defrecord Leaf [^"[B" key value])
 
@@ -121,7 +117,7 @@
 ;; Path compression will change how this works.
 (defn leaf-insert-helper [^Leaf leaf idx ^"[B" key-bytes value]
   ((fn step [^long idx]
-     (let [node (make-node4)
+     (let [node empty-node4
            new-key-byte (aget key-bytes idx)
            old-key-byte (aget (bytes (.key leaf)) idx)]
        (if (= new-key-byte old-key-byte)
@@ -133,7 +129,7 @@
 ;;; Public API
 
 (defn art-make-tree []
-  (make-node4))
+  empty-node4)
 
 (defn art-lookup [tree ^"[B" key-bytes]
   (loop [idx 0
