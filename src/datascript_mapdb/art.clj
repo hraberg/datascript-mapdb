@@ -137,7 +137,7 @@
          node (or tree (art-make-tree))]
     (let [child (some-> node (lookup (aget key-bytes idx)))]
       (if (and (satisfies? ARTNode child)
-               (< (count key-bytes) (dec idx)))
+               (< idx (count key-bytes)))
         (recur (inc idx) child)
         (insert node (aget key-bytes idx)
                 (if (or (nil? child) (leaf-matches-key? child key-bytes))
