@@ -20,31 +20,35 @@
     (when-not (neg? pos)
       (aget nodes pos))))
 
+(defn insert-into-node-helper [size pos ^"[B" keys ^objects nodes key-byte value make-node]
+  (let [size (long size)
+        pos (long pos)
+        new-keys (aclone keys)
+        new-nodes (aclone nodes)]
+    (aset new-keys pos (byte key-byte))
+    (aset new-nodes pos value)
+    (System/arraycopy keys pos new-keys (inc pos) (- size pos))
+    (System/arraycopy nodes pos new-nodes (inc pos) (- size pos))
+    (make-node (inc size) new-keys new-nodes)))
+
 (defn grow-helper [^long size ^"[B" keys ^objects nodes node]
-  (loop [idx 0
-         node node]
-    (if (< idx size)
-      (recur (inc idx) (insert node (aget keys idx) (aget nodes idx)))
-      node)))
+  (let [new-keys (aclone ^bytes (:keys node))
+        new-nodes (aclone ^objects (:nodes node))]
+    (System/arraycopy keys 0 new-keys 0 size)
+    (System/arraycopy nodes 0 new-nodes 0 size)
+    (assoc node :keys new-keys :nodes new-nodes :size size)))
 
 (defn insert-helper [size ^"[B" keys ^objects nodes key-byte value make-node empty-larger-node]
   (let [size (long size)
         pos (key-position size keys key-byte)
-        new-keys (aclone keys)
-        new-nodes (aclone nodes)
         capacity (count keys)]
     (if (neg? pos)
       (if (< size capacity)
-        (let [pos (-> pos inc Math/abs)]
-          (aset new-keys pos (byte key-byte))
-          (aset new-nodes pos value)
-          (System/arraycopy keys pos new-keys (inc pos) (- capacity (inc pos)))
-          (System/arraycopy nodes pos new-nodes (inc pos) (- capacity (inc pos)))
-          (make-node (inc size) new-keys new-nodes))
+        (insert-into-node-helper size (-> pos long inc Math/abs) keys nodes key-byte value make-node)
         (insert (grow-helper size keys nodes empty-larger-node) key-byte value))
       (make-node size
-                 (doto new-keys (aset pos (byte key-byte)))
-                 (doto new-nodes (aset pos value))))))
+                 (doto (aclone keys) (aset pos (byte key-byte)))
+                 (doto (aclone nodes) (aset pos value))))))
 
 (declare empty-node16 empty-node48 empty-node256)
 
