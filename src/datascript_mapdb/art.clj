@@ -101,6 +101,9 @@
 
 (defrecord Leaf [^"[B" key value])
 
+(defn leaf-matches-key? [^Leaf leaf ^"[B" key-bytes]
+  (Arrays/equals key-bytes (bytes (.key leaf))))
+
 (defn make-node4 []
   (->Node4 0 (byte-array 4 (byte 4)) (object-array 4)))
 
@@ -123,7 +126,7 @@
          node tree]
     (if (instance? Leaf node)
       (let [^Leaf leaf node]
-        (when (Arrays/equals key-bytes (bytes (.key leaf)))
+        (when (leaf-matches-key? leaf key-bytes)
           (.value leaf)))
       (when (and node (< idx (count key-bytes)))
         (recur (inc idx) (lookup node (aget key-bytes idx)))))))
@@ -137,8 +140,7 @@
                (< (count key-bytes) (dec idx)))
         (recur (inc idx) child)
         (insert node (aget key-bytes idx)
-                (if (or (nil? child)
-                        (Arrays/equals key-bytes (bytes (.key ^Leaf child))))
+                (if (or (nil? child) (leaf-matches-key? child key-bytes))
                   (->Leaf key-bytes value)
                   (-> (art-make-tree)
                       (insert (aget key-bytes (inc idx)) (->Leaf key-bytes value))
