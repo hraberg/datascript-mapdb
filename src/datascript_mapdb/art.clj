@@ -28,21 +28,19 @@
       node)))
 
 (defn insert-helper [size ^"[B" keys ^objects nodes key-byte value make-node empty-larger-node]
-  (let [pos (key-position size keys key-byte)
+  (let [size (long size)
+        pos (key-position size keys key-byte)
         new-keys (aclone keys)
         new-nodes (aclone nodes)
         capacity (count keys)]
     (if (neg? pos)
-      (if (< (long size) capacity)
+      (if (< size capacity)
         (let [pos (-> pos inc Math/abs)]
           (aset new-keys pos (byte key-byte))
           (aset new-nodes pos value)
-          (loop [idx (inc pos)]
-            (when (< idx capacity)
-              (aset new-keys idx (aget keys (dec idx)))
-              (aset new-nodes idx (aget nodes (dec idx)))
-              (recur (inc idx))))
-          (make-node (inc (long size)) new-keys new-nodes))
+          (System/arraycopy keys pos new-keys (inc pos) (- capacity (inc pos)))
+          (System/arraycopy nodes pos new-nodes (inc pos) (- capacity (inc pos)))
+          (make-node (inc size) new-keys new-nodes))
         (insert (grow-helper size keys nodes empty-larger-node) key-byte value))
       (make-node size
                  (doto new-keys (aset pos (byte key-byte)))
@@ -123,14 +121,15 @@
      (let [new-key-byte (aget key-bytes idx)
            old-key-byte (aget (bytes (.key leaf)) idx)]
        (if (= new-key-byte old-key-byte)
-          (insert empty-node4 new-key-byte (step (inc idx)))
-          (-> empty-node4
-              (insert new-key-byte (->Leaf key-bytes value))
-              (insert old-key-byte leaf))))) idx))
+         (insert empty-node4 new-key-byte (step (inc idx)))
+         (-> empty-node4
+             (insert new-key-byte (->Leaf key-bytes value))
+             (insert old-key-byte leaf))))) idx))
 
 (extend-protocol ARTKey
   String
   ;; Strings needs to be 0 terminated, see IV. CONSTRUCTING BINARY-COMPARABLE KEYS
+  ;; TODO: this probably breaks down for wider chars.
   (to-key-bytes [this]
     (let [bytes (.getBytes this "UTF-8") ]
       (Arrays/copyOf bytes (inc (count bytes)))))
@@ -163,22 +162,24 @@
 
 (defn art-insert [tree key value]
   (let [key-bytes (bytes (to-key-bytes key))]
-    (loop [idx 0
-           node (or tree (art-make-tree))]
-      (let [child (some-> node (lookup (aget key-bytes idx)))]
-        (if (and (satisfies? ARTNode child)
-                 (< (inc idx) (count key-bytes)))
-          (recur (inc idx) child)
-          (insert node (aget key-bytes idx)
-                  (if (or (nil? child) (leaf-matches-key? child key-bytes))
-                    (->Leaf key-bytes value)
-                    (leaf-insert-helper child (inc idx) key-bytes value))))))))
+    ((fn step [^long idx node]
+       (insert
+        node
+        (aget key-bytes idx)
+        (let [child (lookup node (aget key-bytes idx))]
+          (if (and (satisfies? ARTNode child)
+                   (< (inc idx) (count key-bytes)))
+            (step (inc idx) child)
+            (if (or (nil? child) (leaf-matches-key? child key-bytes))
+              (->Leaf key-bytes value)
+              (leaf-insert-helper child (inc idx) key-bytes value))))))
+     0 (or tree (art-make-tree)))))
 
 (comment
   (-> (art-make-tree)
       (art-insert "foo" "boo")
-      (art-insert "bar" "baz")
-      (art-lookup "foo"))
+      (art-insert "bar" "boz")
+      (art-lookup "bar"))
 
   (-> (art-make-tree)
       (art-insert 42 "boo")
