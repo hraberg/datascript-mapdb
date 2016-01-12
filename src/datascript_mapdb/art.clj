@@ -1,5 +1,6 @@
 (ns datascript-mapdb.art
-  (:import [java.util Arrays]))
+  (:import [java.util Arrays]
+           [java.nio ByteBuffer ByteOrder]))
 
 ;;; Persistent Adaptive Radix Tree
 ;; see http://www3.informatik.tu-muenchen.de/~leis/papers/ART.pdf
@@ -46,6 +47,7 @@
 
 (declare make-node16 make-node48 make-node256)
 
+;; Path compression should happen here when size is one.
 (defrecord Node4 [^long size ^"[B" keys ^objects nodes]
   ARTNode
   (lookup [this key-byte]
@@ -99,11 +101,6 @@
                  (nil? (aget nodes key-byte)) inc)
                (doto (aclone nodes) (aset key-byte value)))))
 
-(defrecord Leaf [^"[B" key value])
-
-(defn leaf-matches-key? [^Leaf leaf ^"[B" key-bytes]
-  (Arrays/equals key-bytes (bytes (.key leaf))))
-
 (defn make-node4 []
   (->Node4 0 (byte-array 4 (byte 4)) (object-array 4)))
 
@@ -115,6 +112,23 @@
 
 (defn make-node256 []
   (->Node256 0 (object-array 256)))
+
+(defrecord Leaf [^"[B" key value])
+
+(defn leaf-matches-key? [^Leaf leaf ^"[B" key-bytes]
+  (Arrays/equals key-bytes (bytes (.key leaf))))
+
+;; Path compression will change how this works.
+(defn leaf-insert-helper [^Leaf leaf idx ^"[B" key-bytes value]
+  ((fn step [^long idx]
+     (let [node (make-node4)
+           new-key-byte (aget key-bytes idx)
+           old-key-byte (aget (bytes (.key leaf)) idx)]
+       (if (= new-key-byte old-key-byte)
+          (insert node new-key-byte (step (inc idx)))
+          (-> node
+              (insert new-key-byte (->Leaf key-bytes value))
+              (insert old-key-byte leaf))))) idx))
 
 ;;; Public API
 
@@ -141,25 +155,38 @@
         (insert node (aget key-bytes idx)
                 (if (or (nil? child) (leaf-matches-key? child key-bytes))
                   (->Leaf key-bytes value)
-                  (-> (art-make-tree)
-                      (insert (aget key-bytes (inc idx)) (->Leaf key-bytes value))
-                      (insert (aget (bytes (.key ^Leaf child)) (inc idx)) child))))))))
+                  (leaf-insert-helper child (inc idx) key-bytes value)))))))
 
 ;; Strings needs to be 0 terminated, see IV. CONSTRUCTING BINARY-COMPARABLE KEYS
 
-(defn str-to-key-bytes [^String s]
+(defn str-to-key-bytes ^bytes [^String s]
   (let [str-bytes (.getBytes s "UTF-8") ]
     (Arrays/copyOf str-bytes (inc (count str-bytes)))))
 
-(defn art-lookup-str [tree str-key]
-  (art-lookup tree (str-to-key-bytes str-key)))
+(defn art-lookup-str [tree ^String key]
+  (art-lookup tree (str-to-key-bytes key)))
 
-(defn art-insert-str [tree str-key value]
-  (art-insert tree (str-to-key-bytes str-key) value))
+(defn art-insert-str [tree ^String key value]
+  (art-insert tree (str-to-key-bytes key) value))
 
+(defn long-to-key-bytes ^bytes [^long x]
+  (-> (ByteBuffer/allocate Long/BYTES)
+      (.putLong x)
+      .array))
+
+(defn art-lookup-long [tree ^long key]
+  (art-lookup tree (long-to-key-bytes key)))
+
+(defn art-insert-long [tree ^long key value]
+  (art-insert tree (long-to-key-bytes key) value))
 
 (comment
   (-> (art-make-tree)
       (art-insert-str "foo" "boo")
       (art-insert-str "bar" "baz")
-      (art-lookup-str "foo")))
+      (art-lookup-str "foo"))
+
+  (-> (art-make-tree)
+      (art-insert-long 42 "boo")
+      (art-insert-long 64 "baz")
+      (art-lookup-long 64)))
