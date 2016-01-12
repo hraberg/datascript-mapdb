@@ -9,6 +9,9 @@
   (lookup [this key-byte])
   (insert [this key-byte value]))
 
+(defprotocol ARTKey
+  (to-key-bytes [this]))
+
 (defn key-position ^long [^long size ^"[B" keys ^long key-byte]
   (Arrays/binarySearch keys 0 size (byte key-byte)))
 
@@ -126,55 +129,51 @@
               (insert new-key-byte (->Leaf key-bytes value))
               (insert old-key-byte leaf))))) idx))
 
+(extend-protocol ARTKey
+  String
+  ;; Strings needs to be 0 terminated, see IV. CONSTRUCTING BINARY-COMPARABLE KEYS
+  (to-key-bytes [this]
+    (let [bytes (.getBytes this "UTF-8") ]
+      (Arrays/copyOf bytes (inc (count bytes)))))
+
+  Long
+  (to-key-bytes [this]
+    (-> (ByteBuffer/allocate Long/BYTES)
+        (.putLong this)
+        .array))
+
+  Object
+  (to-key-bytes [this]
+    this))
+
 ;;; Public API
 
 (defn art-make-tree []
   empty-node4)
 
-(defn art-lookup [tree ^"[B" key-bytes]
-  (loop [idx 0
-         node tree]
-    (if (instance? Leaf node)
-      (let [^Leaf leaf node]
-        (when (leaf-matches-key? leaf key-bytes)
-          (.value leaf)))
-      (when (and node (< idx (count key-bytes)))
-        (recur (inc idx) (lookup node (aget key-bytes idx)))))))
+(defn art-lookup [tree key]
+  (let [key-bytes (bytes (to-key-bytes key))]
+    (loop [idx 0
+           node tree]
+      (if (instance? Leaf node)
+        (let [^Leaf leaf node]
+          (when (leaf-matches-key? leaf key-bytes)
+            (.value leaf)))
+        (when (and node (< idx (count key-bytes)))
+          (recur (inc idx) (lookup node (aget key-bytes idx))))))))
 
-(defn art-insert [tree ^"[B" key-bytes value]
-  (loop [idx 0
-         node (or tree (art-make-tree))]
-    (let [child (some-> node (lookup (aget key-bytes idx)))]
-      (if (and (satisfies? ARTNode child)
-               (< (inc idx) (count key-bytes)))
-        (recur (inc idx) child)
-        (insert node (aget key-bytes idx)
-                (if (or (nil? child) (leaf-matches-key? child key-bytes))
-                  (->Leaf key-bytes value)
-                  (leaf-insert-helper child (inc idx) key-bytes value)))))))
-
-;; Strings needs to be 0 terminated, see IV. CONSTRUCTING BINARY-COMPARABLE KEYS
-
-(defn str-to-key-bytes ^bytes [^String s]
-  (let [str-bytes (.getBytes s "UTF-8") ]
-    (Arrays/copyOf str-bytes (inc (count str-bytes)))))
-
-(defn art-lookup-str [tree ^String key]
-  (art-lookup tree (str-to-key-bytes key)))
-
-(defn art-insert-str [tree ^String key value]
-  (art-insert tree (str-to-key-bytes key) value))
-
-(defn long-to-key-bytes ^bytes [^long x]
-  (-> (ByteBuffer/allocate Long/BYTES)
-      (.putLong x)
-      .array))
-
-(defn art-lookup-long [tree ^long key]
-  (art-lookup tree (long-to-key-bytes key)))
-
-(defn art-insert-long [tree ^long key value]
-  (art-insert tree (long-to-key-bytes key) value))
+(defn art-insert [tree key value]
+  (let [key-bytes (bytes (to-key-bytes key))]
+    (loop [idx 0
+           node (or tree (art-make-tree))]
+      (let [child (some-> node (lookup (aget key-bytes idx)))]
+        (if (and (satisfies? ARTNode child)
+                 (< (inc idx) (count key-bytes)))
+          (recur (inc idx) child)
+          (insert node (aget key-bytes idx)
+                  (if (or (nil? child) (leaf-matches-key? child key-bytes))
+                    (->Leaf key-bytes value)
+                    (leaf-insert-helper child (inc idx) key-bytes value))))))))
 
 (comment
   (-> (art-make-tree)
