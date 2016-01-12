@@ -73,13 +73,13 @@
   ARTNode
   (lookup [this key-byte]
     (let [pos (aget key-index (byte key-byte))]
-      (when (< pos (count nodes))
+      (when-not (neg? pos)
         (aget nodes pos))))
 
   (insert [this key-byte value]
     (let [idx (aget key-index key-byte)
           capacity (count nodes)
-          new-key? (= capacity idx)
+          new-key? (neg? idx)
           idx (byte (if new-key?
                       size
                       idx))]
@@ -106,11 +106,11 @@
                  (nil? (aget nodes key-byte)) inc)
                (doto (aclone nodes) (aset key-byte value)))))
 
-(def empty-node4 (->Node4 0 (byte-array 4 (byte 4)) (object-array 4)))
+(def empty-node4 (->Node4 0 (byte-array 4) (object-array 4)))
 
-(def empty-node16 (->Node16 0 (byte-array 16 (byte 16)) (object-array 16)))
+(def empty-node16 (->Node16 0 (byte-array 16) (object-array 16)))
 
-(def empty-node48 (->Node48 0 (byte-array 256 (byte 48)) (object-array 48)))
+(def empty-node48 (->Node48 0 (byte-array 256 (byte -1)) (object-array 48)))
 
 (def empty-node256 (->Node256 0 (object-array 256)))
 
