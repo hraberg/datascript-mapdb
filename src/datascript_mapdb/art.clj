@@ -134,7 +134,7 @@
 ;; Strings needs to be 0 terminated, see IV. CONSTRUCTING BINARY-COMPARABLE KEYS
 (defn art-insert [tree ^"[B" key-bytes value]
   (loop [idx 0
-         node tree]
+         node (or tree (art-make-tree))]
     (let [child (some-> node (lookup (aget key-bytes idx)))]
       (if (and (satisfies? ARTNode child)
                (< (count key-bytes) (dec idx)))
