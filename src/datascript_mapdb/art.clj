@@ -131,7 +131,6 @@
       (when (and node (< idx (count key-bytes)))
         (recur (inc idx) (lookup node (aget key-bytes idx)))))))
 
-;; Strings needs to be 0 terminated, see IV. CONSTRUCTING BINARY-COMPARABLE KEYS
 (defn art-insert [tree ^"[B" key-bytes value]
   (loop [idx 0
          node (or tree (art-make-tree))]
@@ -146,8 +145,21 @@
                       (insert (aget key-bytes (inc idx)) (->Leaf key-bytes value))
                       (insert (aget (bytes (.key ^Leaf child)) (inc idx)) child))))))))
 
+;; Strings needs to be 0 terminated, see IV. CONSTRUCTING BINARY-COMPARABLE KEYS
+
+(defn str-to-key-bytes [^String s]
+  (let [str-bytes (.getBytes s "UTF-8") ]
+    (Arrays/copyOf str-bytes (inc (count str-bytes)))))
+
+(defn art-lookup-str [tree str-key]
+  (art-lookup tree (str-to-key-bytes str-key)))
+
+(defn art-insert-str [tree str-key value]
+  (art-insert tree (str-to-key-bytes str-key) value))
+
+
 (comment
   (-> (art-make-tree)
-      (art-insert (byte-array [2 3 0]) "boo")
-      (art-insert (byte-array [2 0]) "baz")
-      (art-lookup (byte-array [2 0]))))
+      (art-insert-str "foo" "boo")
+      (art-insert-str "bar" "baz")
+      (art-lookup-str "foo")))
