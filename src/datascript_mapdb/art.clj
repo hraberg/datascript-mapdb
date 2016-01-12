@@ -120,12 +120,11 @@
 ;; Path compression will change how this works.
 (defn leaf-insert-helper [^Leaf leaf idx ^"[B" key-bytes value]
   ((fn step [^long idx]
-     (let [node empty-node4
-           new-key-byte (aget key-bytes idx)
+     (let [new-key-byte (aget key-bytes idx)
            old-key-byte (aget (bytes (.key leaf)) idx)]
        (if (= new-key-byte old-key-byte)
-          (insert node new-key-byte (step (inc idx)))
-          (-> node
+          (insert empty-node4 new-key-byte (step (inc idx)))
+          (-> empty-node4
               (insert new-key-byte (->Leaf key-bytes value))
               (insert old-key-byte leaf))))) idx))
 
@@ -177,11 +176,12 @@
 
 (comment
   (-> (art-make-tree)
-      (art-insert-str "foo" "boo")
-      (art-insert-str "bar" "baz")
-      (art-lookup-str "foo"))
+      (art-insert "foo" "boo")
+      (art-insert "bar" "baz")
+      (art-lookup "foo"))
 
   (-> (art-make-tree)
-      (art-insert-long 42 "boo")
-      (art-insert-long 64 "baz")
-      (art-lookup-long 64)))
+      (art-insert 42 "boo")
+      (art-insert 64 "baz")
+      (art-insert 63 "baz")
+      (art-lookup 63)))
