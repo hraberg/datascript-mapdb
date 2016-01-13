@@ -191,7 +191,7 @@
             (step (inc depth) child)
             (if (or (nil? child) (leaf-matches-key? child key-bytes))
               (->Leaf key-bytes value)
-              (leaf-insert-helper child depth key-bytes value))))))
+              (leaf-insert-helper child (inc depth) key-bytes value))))))
      0 (or tree (art-make-tree)))))
 
 (comment
