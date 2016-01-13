@@ -121,15 +121,15 @@
   (Arrays/equals key-bytes (bytes (.key leaf))))
 
 ;; Path compression will change how this works.
-(defn leaf-insert-helper [^Leaf leaf idx ^bytes key-bytes value]
-  ((fn step [^long idx]
-     (let [new-key-byte (aget key-bytes idx)
-           old-key-byte (aget (bytes (.key leaf)) idx)]
+(defn leaf-insert-helper [^Leaf leaf depth ^bytes key-bytes value]
+  ((fn step [^long depth]
+     (let [new-key-byte (aget key-bytes depth)
+           old-key-byte (aget (bytes (.key leaf)) depth)]
        (if (= new-key-byte old-key-byte)
-         (insert empty-node4 new-key-byte (step (inc idx)))
+         (insert empty-node4 new-key-byte (step (inc depth)))
          (-> empty-node4
              (insert new-key-byte (->Leaf key-bytes value))
-             (insert old-key-byte leaf))))) idx))
+             (insert old-key-byte leaf))))) depth))
 
 (extend-protocol ARTKey
   String
@@ -156,28 +156,28 @@
 
 (defn art-lookup [tree key]
   (let [key-bytes (bytes (to-key-bytes key))]
-    (loop [idx 0
+    (loop [depth 0
            node tree]
       (if (instance? Leaf node)
         (let [^Leaf leaf node]
           (when (leaf-matches-key? leaf key-bytes)
             (.value leaf)))
-        (when (and node (< idx (count key-bytes)))
-          (recur (inc idx) (lookup node (aget key-bytes idx))))))))
+        (when (and node (< depth (count key-bytes)))
+          (recur (inc depth) (lookup node (aget key-bytes depth))))))))
 
 (defn art-insert [tree key value]
   (let [key-bytes (bytes (to-key-bytes key))]
-    ((fn step [^long idx node]
+    ((fn step [^long depth node]
        (insert
         node
-        (aget key-bytes idx)
-        (let [child (lookup node (aget key-bytes idx))]
+        (aget key-bytes depth)
+        (let [child (lookup node (aget key-bytes depth))]
           (if (and (satisfies? ARTNode child)
-                   (< (inc idx) (count key-bytes)))
-            (step (inc idx) child)
+                   (< (inc depth) (count key-bytes)))
+            (step (inc depth) child)
             (if (or (nil? child) (leaf-matches-key? child key-bytes))
               (->Leaf key-bytes value)
-              (leaf-insert-helper child idx key-bytes value))))))
+              (leaf-insert-helper child depth key-bytes value))))))
      0 (or tree (art-make-tree)))))
 
 (comment
