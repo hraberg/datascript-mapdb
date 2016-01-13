@@ -177,7 +177,7 @@
             (step (inc idx) child)
             (if (or (nil? child) (leaf-matches-key? child key-bytes))
               (->Leaf key-bytes value)
-              (leaf-insert-helper child (inc idx) key-bytes value))))))
+              (leaf-insert-helper child idx key-bytes value))))))
      0 (or tree (art-make-tree)))))
 
 (comment
@@ -190,4 +190,12 @@
       (art-insert 42 "boo")
       (art-insert 64 "baz")
       (art-insert 63 "baz")
-      (art-lookup 63)))
+      (art-lookup 63))
+
+  (def words (-> (str (System/getenv "HOME") "/Downloads/pg27.txt")
+                 slurp
+                 (clojure.string/split #"\s+")))
+
+  (reduce (fn [tree word]
+            (art-insert tree word true))
+          (art-make-tree) words))
