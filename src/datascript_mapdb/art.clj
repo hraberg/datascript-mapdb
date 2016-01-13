@@ -1,5 +1,5 @@
 (ns datascript-mapdb.art
-  (:import [java.util Arrays]
+  (:import [java.util Arrays Date]
            [java.nio ByteBuffer ByteOrder]))
 
 ;;; Persistent Adaptive Radix Tree
@@ -131,10 +131,20 @@
              (insert new-key-byte (->Leaf key-bytes value))
              (insert old-key-byte leaf))))) depth))
 
+(defn key-bytes-to-str [^bytes key]
+  (String. key 0 (dec (count key)) "UTF-8"))
+
+(defn key-bytes-to-long [^bytes key]
+  (.getLong (ByteBuffer/wrap key)))
+
 (extend-protocol ARTKey
-  String
+  (class (byte-array 0))
+  (to-key-bytes [this]
+    this)
+
   ;; Strings needs to be 0 terminated, see IV. CONSTRUCTING BINARY-COMPARABLE KEYS
   ;; TODO: this probably breaks down for wider chars.
+  String
   (to-key-bytes [this]
     (let [bytes (.getBytes this "UTF-8") ]
       (Arrays/copyOf bytes (inc (count bytes)))))
@@ -145,9 +155,13 @@
         (.putLong this)
         .array))
 
+  Date
+  (to-key-bytes [this]
+    (to-key-bytes (str (.toInstant this))))
+
   Object
   (to-key-bytes [this]
-    this))
+    (to-key-bytes (str this))))
 
 ;;; Public API
 
