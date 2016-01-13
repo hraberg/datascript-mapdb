@@ -71,29 +71,29 @@
 (defrecord Node48 [^long size ^"[B" key-index ^objects nodes]
   ARTNode
   (lookup [this key-byte]
-    (let [pos (aget key-index (byte key-byte))]
+    (let [key-int (Byte/toUnsignedInt key-byte)
+          pos (aget key-index key-int)]
       (when-not (neg? pos)
         (aget nodes pos))))
 
   (insert [this key-byte value]
     (let [key-int (Byte/toUnsignedInt key-byte)
-          idx (aget key-index key-int)
-          capacity (count nodes)
-          new-key? (neg? idx)
-          idx (byte (if new-key?
-                      size
-                      idx))]
-      (if (< idx capacity)
-        (->Node48 (cond-> idx
+          pos (aget key-index key-int)
+          new-key? (neg? pos)
+          pos (if new-key?
+                (byte size)
+                pos)]
+      (if (< pos (count nodes))
+        (->Node48 (cond-> pos
                     new-key? inc)
-                  (doto (aclone key-index) (aset key-int idx))
-                  (doto (aclone nodes) (aset idx value)))
+                  (doto (aclone key-index) (aset key-int pos))
+                  (doto (aclone nodes) (aset pos value)))
         (loop [key 0
                node empty-node256]
           (if (< key (count key-index))
-            (let [idx (aget key-index key)]
+            (let [pos (aget key-index key)]
               (recur (inc key) (cond-> node
-                                 (< idx capacity) (insert key (aget nodes idx)))))
+                                 (not (neg? pos)) (insert key (aget nodes pos)))))
             (insert node key-byte value)))))))
 
 (defrecord Node256 [^long size ^objects nodes]
