@@ -99,7 +99,8 @@
 (defrecord Node256 [^long size ^objects nodes]
   ARTNode
   (lookup [this key-byte]
-    (aget nodes key-byte))
+    (let [key-int (Byte/toUnsignedInt key-byte)]
+      (aget nodes key-int)))
 
   (insert [this key-byte value]
     (let [key-int (Byte/toUnsignedInt key-byte)]
