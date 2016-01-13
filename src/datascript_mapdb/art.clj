@@ -12,7 +12,7 @@
 (defprotocol ARTKey
   (to-key-bytes [this]))
 
-(defn key-position ^long [^long size ^"[B" keys ^long key-byte]
+(defn key-position ^long [^long size ^bytes keys ^long key-byte]
   (Arrays/binarySearch keys 0 size (byte key-byte)))
 
 (defn lookup-helper [^long size keys ^objects nodes ^long key-byte]
@@ -20,39 +20,38 @@
     (when-not (neg? pos)
       (aget nodes pos))))
 
-(defn insert-into-node-helper [size pos ^"[B" keys ^objects nodes key-byte value make-node]
-  (let [size (long size)
-        pos (long pos)
-        new-keys (aclone keys)
-        new-nodes (aclone nodes)]
-    (aset new-keys pos (byte key-byte))
-    (aset new-nodes pos value)
-    (System/arraycopy keys pos new-keys (inc pos) (- size pos))
-    (System/arraycopy nodes pos new-nodes (inc pos) (- size pos))
-    (make-node (inc size) new-keys new-nodes)))
+(defn make-gap [^long size ^long pos src dest]
+  (System/arraycopy src pos dest (inc pos) (- size pos)))
 
-(defn grow-helper [^long size ^"[B" keys ^objects nodes node]
+(defn grow-helper [^long size ^bytes keys ^objects nodes node]
   (loop [idx 0
          node node]
     (if (< idx size)
       (recur (inc idx) (insert node (aget keys idx) (aget nodes idx)))
       node)))
 
-(defn insert-helper [size ^"[B" keys ^objects nodes key-byte value make-node empty-larger-node]
+(defn insert-helper [size ^bytes keys ^objects nodes key-byte value make-node empty-larger-node]
   (let [size (long size)
-        pos (key-position size keys key-byte)]
-    (if (neg? pos)
-      (if (< size (count keys))
-        (insert-into-node-helper size (-> pos long inc Math/abs) keys nodes key-byte value make-node)
-        (insert (grow-helper size keys nodes empty-larger-node) key-byte value))
-      (make-node size
-                 (doto (aclone keys) (aset pos (byte key-byte)))
-                 (doto (aclone nodes) (aset pos value))))))
+        pos (key-position size keys key-byte)
+        new-key? (neg? pos)]
+    (if (and new-key? (= size (count keys)))
+      (insert (grow-helper size keys nodes empty-larger-node) key-byte value)
+      (let [pos (cond-> pos
+                  new-key? (-> inc Math/abs))
+            new-keys (aclone keys)
+            new-nodes (aclone nodes)]
+        (when new-key?
+          (make-gap size pos keys new-keys)
+          (make-gap size pos nodes new-nodes))
+        (make-node (cond-> size
+                     new-key? inc)
+                   (doto new-keys (aset pos (byte key-byte)))
+                   (doto new-nodes (aset pos value)))))))
 
 (declare empty-node16 empty-node48 empty-node256)
 
 ;; Path compression should happen here when size is one.
-(defrecord Node4 [^long size ^"[B" keys ^objects nodes]
+(defrecord Node4 [^long size ^bytes keys ^objects nodes]
   ARTNode
   (lookup [this key-byte]
     (lookup-helper size keys nodes key-byte))
@@ -60,7 +59,7 @@
   (insert [this key-byte value]
     (insert-helper size keys nodes key-byte value ->Node4 empty-node16)))
 
-(defrecord Node16 [^long size ^"[B" keys ^objects nodes]
+(defrecord Node16 [^long size ^bytes keys ^objects nodes]
   ARTNode
   (lookup [this key-byte]
     (lookup-helper size keys nodes key-byte))
@@ -68,7 +67,7 @@
   (insert [this key-byte value]
     (insert-helper size keys nodes key-byte value ->Node16 empty-node48)))
 
-(defrecord Node48 [^long size ^"[B" key-index ^objects nodes]
+(defrecord Node48 [^long size ^bytes key-index ^objects nodes]
   ARTNode
   (lookup [this key-byte]
     (let [key-int (Byte/toUnsignedInt key-byte)
@@ -116,13 +115,13 @@
 
 (def empty-node256 (->Node256 0 (object-array 256)))
 
-(defrecord Leaf [^"[B" key value])
+(defrecord Leaf [^bytes key value])
 
-(defn leaf-matches-key? [^Leaf leaf ^"[B" key-bytes]
+(defn leaf-matches-key? [^Leaf leaf ^bytes key-bytes]
   (Arrays/equals key-bytes (bytes (.key leaf))))
 
 ;; Path compression will change how this works.
-(defn leaf-insert-helper [^Leaf leaf idx ^"[B" key-bytes value]
+(defn leaf-insert-helper [^Leaf leaf idx ^bytes key-bytes value]
   ((fn step [^long idx]
      (let [new-key-byte (aget key-bytes idx)
            old-key-byte (aget (bytes (.key leaf)) idx)]
