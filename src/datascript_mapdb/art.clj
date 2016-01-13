@@ -32,18 +32,17 @@
     (make-node (inc size) new-keys new-nodes)))
 
 (defn grow-helper [^long size ^"[B" keys ^objects nodes node]
-  (let [new-keys (aclone ^bytes (:keys node))
-        new-nodes (aclone ^objects (:nodes node))]
-    (System/arraycopy keys 0 new-keys 0 size)
-    (System/arraycopy nodes 0 new-nodes 0 size)
-    (assoc node :keys new-keys :nodes new-nodes :size size)))
+  (loop [idx 0
+         node node]
+    (if (< idx size)
+      (recur (inc idx) (insert node (aget keys idx) (aget nodes idx)))
+      node)))
 
 (defn insert-helper [size ^"[B" keys ^objects nodes key-byte value make-node empty-larger-node]
   (let [size (long size)
-        pos (key-position size keys key-byte)
-        capacity (count keys)]
+        pos (key-position size keys key-byte)]
     (if (neg? pos)
-      (if (< size capacity)
+      (if (< size (count keys))
         (insert-into-node-helper size (-> pos long inc Math/abs) keys nodes key-byte value make-node)
         (insert (grow-helper size keys nodes empty-larger-node) key-byte value))
       (make-node size
@@ -77,7 +76,8 @@
         (aget nodes pos))))
 
   (insert [this key-byte value]
-    (let [idx (aget key-index key-byte)
+    (let [key-int (Byte/toUnsignedInt key-byte)
+          idx (aget key-index key-int)
           capacity (count nodes)
           new-key? (neg? idx)
           idx (byte (if new-key?
@@ -86,7 +86,7 @@
       (if (< idx capacity)
         (->Node48 (cond-> idx
                     new-key? inc)
-                  (doto (aclone key-index) (aset (byte key-byte) idx))
+                  (doto (aclone key-index) (aset key-int idx))
                   (doto (aclone nodes) (aset idx value)))
         (loop [key 0
                node empty-node256]
@@ -102,9 +102,10 @@
     (aget nodes key-byte))
 
   (insert [this key-byte value]
-    (->Node256 (cond-> size
-                 (nil? (aget nodes key-byte)) inc)
-               (doto (aclone nodes) (aset key-byte value)))))
+    (let [key-int (Byte/toUnsignedInt key-byte)]
+      (->Node256 (cond-> size
+                   (nil? (aget nodes key-int)) inc)
+                 (doto (aclone nodes) (aset key-int value))))))
 
 (def empty-node4 (->Node4 0 (byte-array 4) (object-array 4)))
 
