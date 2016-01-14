@@ -148,7 +148,8 @@
     this)
 
   ;; Strings needs to be 0 terminated, see IV. CONSTRUCTING BINARY-COMPARABLE KEYS
-  ;; TODO: this probably breaks down for wider chars.
+  ;; Should work for UTF-8, all non ASCII bytes have the highest bit set.
+  ;; http://stackoverflow.com/a/6907327
   String
   (to-key-bytes [this]
     (let [bytes (.getBytes this "UTF-8") ]
@@ -226,7 +227,7 @@
                              Node48 458
                              Node256 1}}})
 
-  (doseq [[file {:keys [min-key max-key counts]}] tests
+  (doseq [[file {:keys [min-key max-key node-counts]}] tests
           :let [keys (-> (io/resource file)
                          slurp
                          s/split-lines)]]
