@@ -1,9 +1,14 @@
 (ns datascript-mapdb.art
+  (:require [clojure.java.io :as io]
+            [clojure.string :as s])
   (:import [java.util Arrays Date]
            [java.nio ByteBuffer ByteOrder]))
 
 ;;; Persistent Adaptive Radix Tree
-;; see http://www3.informatik.tu-muenchen.de/~leis/papers/ART.pdf
+;; http://www3.informatik.tu-muenchen.de/~leis/papers/ART.pdf
+;; https://github.com/armon/libart
+;; https://github.com/kellydunn/go-art
+
 
 (defprotocol ARTNode
   (lookup [this key-byte])
@@ -206,10 +211,26 @@
       (art-insert 63 "baz")
       (art-lookup 63))
 
-  (def words (-> (str (System/getenv "HOME") "/Downloads/pg27.txt")
-                 slurp
-                 (clojure.string/split #"\s+")))
+  ;; Data from https://github.com/armon/libart
+  ;; https://github.com/armon/libart/blob/master/LICENSE (BSD)
 
-  (reduce (fn [tree word]
-            (art-insert tree word true))
-          (art-make-tree) words))
+  (def tests {"uuid.txt"
+              {:min-key "00026bda-e0ea-4cda-8245-522764e9f325"
+               :max-key "ffffcb46-a92e-4822-82af-a7190f9c1ec5"
+               :node-counts {Leaf 100000}}
+              "words.txt"
+              {:min-key "A" :max-key "zythum"
+               :node-counts {Leaf 235886
+                             Node4 111616
+                             Node16 12181
+                             Node48 458
+                             Node256 1}}})
+
+  (doseq [[file {:keys [min-key max-key counts]}] tests
+          :let [keys (-> (io/resource file)
+                         slurp
+                         s/split-lines)]]
+    (prn (reduce (fn [tree key]
+                   (art-insert tree key key))
+                 (art-make-tree)
+                 keys))))
