@@ -9,6 +9,8 @@
 ;; https://github.com/armon/libart
 ;; https://github.com/kellydunn/go-art
 
+;; TODO: implement path compression.
+;; Not suitable for Datascript indexes as they use Datoms as keys.
 
 (defprotocol ARTNode
   (lookup [this key-byte])
