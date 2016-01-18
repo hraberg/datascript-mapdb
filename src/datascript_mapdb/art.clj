@@ -185,53 +185,20 @@
         (when (and node (< depth (count key-bytes)))
           (recur (inc depth) (lookup node (aget key-bytes depth))))))))
 
-(defn art-insert [tree key value]
-  (let [key-bytes (bytes (to-key-bytes key))]
-    ((fn step [^long depth node]
-       (insert
-        node
-        (aget key-bytes depth)
-        (let [child (lookup node (aget key-bytes depth))]
-          (if (and (satisfies? ARTNode child)
-                   (< (inc depth) (count key-bytes)))
-            (step (inc depth) child)
-            (if (or (nil? child) (leaf-matches-key? child key-bytes))
-              (->Leaf key-bytes value)
-              (leaf-insert-helper child (inc depth) key-bytes value))))))
-     0 (or tree (art-make-tree)))))
-
-(comment
-  (-> (art-make-tree)
-      (art-insert "foo" "boo")
-      (art-insert "bar" "boz")
-      (art-lookup "bar"))
-
-  (-> (art-make-tree)
-      (art-insert 42 "boo")
-      (art-insert 64 "baz")
-      (art-insert 63 "baz")
-      (art-lookup 63))
-
-  ;; Data from https://github.com/armon/libart
-  ;; https://github.com/armon/libart/blob/master/LICENSE (BSD)
-
-  (def tests {"uuid.txt"
-              {:min-key "00026bda-e0ea-4cda-8245-522764e9f325"
-               :max-key "ffffcb46-a92e-4822-82af-a7190f9c1ec5"
-               :node-counts {Leaf 100000}}
-              "words.txt"
-              {:min-key "A" :max-key "zythum"
-               :node-counts {Leaf 235886
-                             Node4 111616
-                             Node16 12181
-                             Node48 458
-                             Node256 1}}})
-
-  (doseq [[file {:keys [min-key max-key node-counts]}] tests
-          :let [keys (-> (io/resource file)
-                         slurp
-                         s/split-lines)]]
-    (prn (reduce (fn [tree key]
-                   (art-insert tree key key))
-                 (art-make-tree)
-                 keys))))
+(defn art-insert
+  ([tree key]
+   (art-insert tree key key))
+  ([tree key value]
+   (let [key-bytes (bytes (to-key-bytes key))]
+     ((fn step [^long depth node]
+        (insert
+         node
+         (aget key-bytes depth)
+         (let [child (lookup node (aget key-bytes depth))]
+           (if (and (satisfies? ARTNode child)
+                    (< (inc depth) (count key-bytes)))
+             (step (inc depth) child)
+             (if (or (nil? child) (leaf-matches-key? child key-bytes))
+               (->Leaf key-bytes value)
+               (leaf-insert-helper child (inc depth) key-bytes value))))))
+      0 (or tree (art-make-tree))))))
