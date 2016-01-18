@@ -31,6 +31,12 @@
     (is (= keys (-> (insert-all keys)
                     (lookup-all keys))))))
 
+(deftest non-existent-keys
+  (let [keys ["aa" "ab" "aba" "abc" "ad"]]
+    (is (every? nil?
+                (-> (insert-all keys)
+                    (lookup-all ["b" "ac" "aabc" "de" "a"]))))))
+
 (deftest uuids
   (let [uuids (-> (io/resource "uuid.txt")
                   io/reader
