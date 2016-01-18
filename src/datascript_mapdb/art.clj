@@ -136,6 +136,9 @@
              (insert new-key-byte (->Leaf key-bytes value))
              (insert old-key-byte leaf))))) depth))
 
+(defn leaf? [node]
+  (instance? Leaf node))
+
 (defn key-bytes-to-str [^bytes key]
   (String. key 0 (dec (count key)) "UTF-8"))
 
@@ -178,10 +181,9 @@
   (let [key-bytes (bytes (to-key-bytes key))]
     (loop [depth 0
            node tree]
-      (if (instance? Leaf node)
-        (let [^Leaf leaf node]
-          (when (leaf-matches-key? leaf key-bytes)
-            (.value leaf)))
+      (if (leaf? node)
+        (when (leaf-matches-key? node key-bytes)
+          (.value ^Leaf node))
         (when (and node (< depth (count key-bytes)))
           (recur (inc depth) (lookup node (aget key-bytes depth))))))))
 
@@ -191,14 +193,12 @@
   ([tree key value]
    (let [key-bytes (bytes (to-key-bytes key))]
      ((fn step [^long depth node]
-        (insert
-         node
-         (aget key-bytes depth)
-         (let [child (lookup node (aget key-bytes depth))]
-           (if (and (satisfies? ARTNode child)
-                    (< (inc depth) (count key-bytes)))
-             (step (inc depth) child)
-             (if (or (nil? child) (leaf-matches-key? child key-bytes))
-               (->Leaf key-bytes value)
-               (leaf-insert-helper child (inc depth) key-bytes value))))))
+        (let [key-byte (aget key-bytes depth)
+              child (lookup node key-byte)
+              new-child (if (and child (not (leaf? child)))
+                          (step (inc depth) child)
+                          (if (or (nil? child) (leaf-matches-key? child key-bytes))
+                            (->Leaf key-bytes value)
+                            (leaf-insert-helper child (inc depth) key-bytes value)))]
+          (insert node key-byte new-child)))
       0 (or tree (art-make-tree))))))
