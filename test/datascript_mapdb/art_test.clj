@@ -8,15 +8,16 @@
 (deftest grow-nodes
   (loop [n 0
          tree (art/art-make-tree)]
-    (let [tree (art/art-insert tree n n)]
-      (is (= n (art/art-lookup tree n)))
-      (instance?
-       (cond
-         (< n 4) Node4
-         (< n 16) Node16
-         (< n 48) Node48
-         (< n 256) Node256)
-       tree)
+    (let [key (byte-array [n])
+          tree (art/art-insert tree key n)]
+      (is (= n (art/art-lookup tree key)))
+      (is (instance?
+           (cond
+             (< n 4) Node4
+             (< n 16) Node16
+             (< n 48) Node48
+             (< n 256) Node256)
+           tree))
       (when (< n 255)
         (recur (inc n) tree)))))
 
