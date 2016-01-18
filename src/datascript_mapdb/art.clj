@@ -88,7 +88,7 @@
                 (byte size)
                 pos)]
       (if (< pos (count nodes))
-        (->Node48 (cond-> pos
+        (->Node48 (cond-> size
                     new-key? inc)
                   (doto (aclone key-index) (aset key-int pos))
                   (doto (aclone nodes) (aset pos value)))
