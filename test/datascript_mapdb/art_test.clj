@@ -11,11 +11,11 @@
     (let [key (byte-array [n])
           tree (art/art-insert tree key n)]
       (is (= n (art/art-lookup tree key)))
-      (is (= (cond
-               (< n 4) Node4
-               (< n 16) Node16
-               (< n 48) Node48
-               (< n 256) Node256)
+      (is (= (condp > n
+               4 Node4
+               16 Node16
+               48 Node48
+               256 Node256)
              (class tree)))
       (when (< n 255)
         (recur (inc n) tree)))))
@@ -37,18 +37,19 @@
                 (-> (insert-all keys)
                     (lookup-all ["b" "ac" "aabc" "de" "a"]))))))
 
+(defn read-lines [resource]
+  (-> (io/resource resource)
+      io/reader
+      line-seq))
+
 (deftest uuids
-  (let [uuids (-> (io/resource "uuid.txt")
-                  io/reader
-                  line-seq)]
+  (let [uuids (read-lines "uuid.txt")]
     (is (= 100000 (count uuids)))
     (is (= uuids (-> (insert-all uuids)
                      (lookup-all uuids))))))
 
 (deftest words
-  (let [words (-> (io/resource "words.txt")
-                  io/reader
-                  line-seq)]
+  (let [words (read-lines "words.txt")]
     (is (= 235886 (count words)))
     (is (= words (-> (insert-all words)
                      (lookup-all words))))))
