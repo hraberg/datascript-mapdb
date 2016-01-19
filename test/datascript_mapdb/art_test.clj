@@ -1,9 +1,7 @@
 (ns datascript-mapdb.art-test
   (:require [datascript-mapdb.art :as art]
             [clojure.java.io :as io]
-            [clojure.string :as s]
-            [clojure.test :refer [deftest is]])
-  (:import [datascript_mapdb.art Node4 Node16 Node48 Node256]))
+            [clojure.test :refer [deftest is]]))
 
 (deftest grow-nodes
   (loop [n 0
@@ -12,10 +10,10 @@
           tree (art/art-insert tree key n)]
       (is (= n (art/art-lookup tree key)))
       (is (= (condp > n
-               4 Node4
-               16 Node16
-               48 Node48
-               256 Node256)
+               4 (class art/empty-node4)
+               16 (class art/empty-node16)
+               48 (class art/empty-node48)
+               256 (class art/empty-node256))
              (class tree)))
       (when (< n 255)
         (recur (inc n) tree)))))
