@@ -8,6 +8,7 @@
 ;; http://www3.informatik.tu-muenchen.de/~leis/papers/ART.pdf
 ;; https://github.com/armon/libart
 ;; https://github.com/kellydunn/go-art
+;; https://github.com/ankurdave/part.git
 
 ;; TODO: implement path compression.
 ;; Not suitable for Datascript indexes as they use Datoms as keys.
