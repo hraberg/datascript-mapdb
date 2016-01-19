@@ -1,6 +1,7 @@
 (ns datascript-mapdb.art-test
   (:require [datascript-mapdb.art :as art]
             [clojure.java.io :as io]
+            [clojure.walk :as w]
             [clojure.test :refer [deftest is]]))
 
 (deftest grow-nodes
@@ -10,11 +11,11 @@
           tree (art/art-insert tree key n)]
       (is (= n (art/art-lookup tree key)))
       (is (= (condp > n
-               4 (class art/empty-node4)
-               16 (class art/empty-node16)
-               48 (class art/empty-node48)
-               256 (class art/empty-node256))
-             (class tree)))
+               4 "Node4"
+               16 "Node16"
+               48 "Node48"
+               256 "Node256")
+             (.getSimpleName (class tree))))
       (when (< n 255)
         (recur (inc n) tree)))))
 
@@ -46,15 +47,26 @@
     (is (= uuids (-> (insert-all uuids)
                      (lookup-all uuids))))))
 
-(deftest words
-  (let [words (read-lines "words.txt")]
-    (is (= 235886 (count words)))
-    (is (= words (-> (insert-all words)
-                     (lookup-all words))))))
+(def object-array-class (class (object-array 0)))
 
-;; words.txt
-;; {Leaf 235886
-;;  Node4 111616
-;;  Node16 12181
-;;  Node48 458
-;;  Node256 1}
+(deftest words
+  (let [words (read-lines "words.txt")
+        tree (insert-all words)
+        counts (volatile! {})]
+    (is (= 235886 (count words)))
+    (is (= words (lookup-all tree words)))
+
+    (w/prewalk #(do (when (record? %)
+                      (vswap! counts update (.getSimpleName (class %)) (fnil inc 0)))
+                    (cond-> %
+                      (instance? object-array-class %) vec))
+               tree)
+
+    (is (= {"Leaf" 235886
+            "Node4" (if (:prefix tree)
+                      111616
+                      191713)
+            "Node16" 12181
+            "Node48" 458
+            "Node256" 1}
+           @counts))))
