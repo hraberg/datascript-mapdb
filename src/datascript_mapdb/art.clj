@@ -58,7 +58,6 @@
 
 (declare empty-node16 empty-node48 empty-node256)
 
-;; Path compression should happen here when size is one.
 (defrecord Node4 [^long size ^bytes keys ^objects nodes]
   ARTNode
   (lookup [this key-byte]
