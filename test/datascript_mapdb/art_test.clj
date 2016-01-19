@@ -63,9 +63,7 @@
                tree)
 
     (is (= {"Leaf" 235886
-            "Node4" (if (:prefix tree)
-                      111616
-                      191713)
+            "Node4" 111616
             "Node16" 12181
             "Node48" 458
             "Node256" 1}
