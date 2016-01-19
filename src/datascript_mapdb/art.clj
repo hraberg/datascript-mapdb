@@ -129,6 +129,7 @@
   (Arrays/equals key-bytes (bytes (.key leaf))))
 
 ;; Path compression will change how this works.
+;; Will just add the common prefix without in-between nodes.
 (defn leaf-insert-helper [^Leaf leaf depth ^bytes key-bytes value]
   ((fn step [^long depth]
      (let [new-key-byte (aget key-bytes depth)
@@ -188,6 +189,7 @@
         (when (leaf-matches-key? node key-bytes)
           (.value ^Leaf node))
         (when (and node (< depth (count key-bytes)))
+          ;; Need to check that prefix matches before recur.
           (recur (inc depth) (lookup node (aget key-bytes depth))))))))
 
 (defn art-insert
@@ -199,6 +201,9 @@
         (let [key-byte (aget key-bytes depth)
               child (lookup node key-byte)
               new-child (if (and child (not (leaf? child)))
+                          ;; Needs to take prefix into account and
+                          ;; potentially split and introduce
+                          ;; intermediate parent.
                           (step (inc depth) child)
                           (if (or (nil? child) (leaf-matches-key? child key-bytes))
                             (->Leaf key-bytes value)
