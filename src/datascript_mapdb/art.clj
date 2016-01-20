@@ -18,7 +18,7 @@
   (^bytes prefix [this]))
 
 (defprotocol ARTKey
-  (to-key-bytes [this]))
+  (^bytes to-key-bytes [this]))
 
 (defn key-position ^long [^long size ^bytes keys ^long key-byte]
   (Arrays/binarySearch keys 0 size (byte key-byte)))
@@ -203,7 +203,7 @@
   empty-node4)
 
 (defn art-lookup [tree key]
-  (let [key-bytes (bytes (to-key-bytes key))]
+  (let [key-bytes (to-key-bytes key)]
     (loop [depth 0
            node tree]
       (if (leaf? node)
@@ -220,7 +220,7 @@
   ([tree key]
    (art-insert tree key key))
   ([tree key value]
-   (let [key-bytes (bytes (to-key-bytes key))]
+   (let [key-bytes (to-key-bytes key)]
      ((fn step [^long depth node]
         (let [prefix (prefix node)
               common-prefix-length (common-prefix-length key-bytes prefix depth)
