@@ -22,6 +22,7 @@
 
 ;; Inspired by the SIMD version in the paper.
 ;; See https://graphics.stanford.edu/~seander/bithacks.html#ZeroInWord
+;; This version uses 9 bit 'bytes' to support full bytes, 0-255.
 ;; TODO: return negative indexes, wire up, test.
 
 (defn key-position-node4 ^long [^long size ^bytes keys ^long key-byte]
