@@ -20,6 +20,47 @@
 (defprotocol ARTKey
   (^bytes to-key-bytes [this]))
 
+;; Inspired by the SIMD version in the paper.
+;; See https://graphics.stanford.edu/~seander/bithacks.html#ZeroInWord
+;; TODO: return negative indexes, wire up, test.
+
+(defn key-position-node4 ^long [^long size ^bytes keys ^long key-byte]
+  (let [x (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 27)
+                  (bit-shift-left (Byte/toUnsignedLong (aget keys 1)) 18)
+                  (bit-shift-left (Byte/toUnsignedLong (aget keys 2)) 9)
+                  (Byte/toUnsignedLong (aget keys 3)))
+        ones 2r000000001000000001000000001000000001
+        two-five-sixths 2r100000000100000000100000000100000000]
+    (Long/bitCount (bit-and (unchecked-subtract x (unchecked-multiply ones (Byte/toUnsignedLong key-byte)))
+                            (bit-and (bit-not x) two-five-sixths)))))
+
+(defn key-position-node16 ^long [^long size ^bytes keys ^long key-byte]
+  (let [x1 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 54)
+                   (bit-shift-left (Byte/toUnsignedLong (aget keys 1)) 45)
+                   (bit-shift-left (Byte/toUnsignedLong (aget keys 2)) 36)
+                   (bit-shift-left (Byte/toUnsignedLong (aget keys 3)) 27)
+                   (bit-shift-left (Byte/toUnsignedLong (aget keys 4)) 18)
+                   (bit-shift-left (Byte/toUnsignedLong (aget keys 5)) 9)
+                   (Byte/toUnsignedLong (aget keys 6)))
+        x2 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 7)) 54)
+                   (bit-shift-left (Byte/toUnsignedLong (aget keys 8)) 45)
+                   (bit-shift-left (Byte/toUnsignedLong (aget keys 9)) 36)
+                   (bit-shift-left (Byte/toUnsignedLong (aget keys 10)) 27)
+                   (bit-shift-left (Byte/toUnsignedLong (aget keys 11)) 18)
+                   (bit-shift-left (Byte/toUnsignedLong (aget keys 12)) 9)
+                   (Byte/toUnsignedLong (aget keys 13)))
+        x3 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 14)) 9)
+                   (Byte/toUnsignedLong (aget keys 15)))
+        key-byte (Byte/toUnsignedLong key-byte)
+        ones 2r000000001000000001000000001000000001000000001000000001000000001
+        two-five-sixths 2r100000000100000000100000000100000000100000000100000000100000000]
+    (+ (Long/bitCount (bit-and (unchecked-subtract x1 (unchecked-multiply ones key-byte))
+                               (bit-and (bit-not x1) two-five-sixths)))
+       (Long/bitCount (bit-and (unchecked-subtract x2 (unchecked-multiply ones key-byte))
+                               (bit-and (bit-not x2) two-five-sixths)))
+       (Long/bitCount (bit-and (unchecked-subtract x3 (unchecked-multiply 2r000000001000000001 key-byte))
+                               (bit-and (bit-not x3) 2r100000000100000000))))))
+
 (defn key-position ^long [^long size ^bytes keys ^long key-byte]
   (Arrays/binarySearch keys 0 size (byte key-byte)))
 
