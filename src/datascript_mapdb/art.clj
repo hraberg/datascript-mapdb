@@ -23,7 +23,8 @@
 ;; Inspired by the SIMD version in the paper.
 ;; See https://graphics.stanford.edu/~seander/bithacks.html#ZeroInWord
 ;; This version uses 9 bit 'bytes' to support full bytes, 0-255.
-;; TODO: return negative indexes, wire up, test.
+;; TODO: doesn't seem to be faster in practice?
+;;       wire up in insert as well.
 
 (defn key-position-node4 ^long [^long size ^bytes keys ^long key-byte]
   (let [x (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 27)
@@ -31,9 +32,12 @@
                   (bit-shift-left (Byte/toUnsignedLong (aget keys 2)) 9)
                   (Byte/toUnsignedLong (aget keys 3)))
         ones 2r000000001000000001000000001000000001
-        two-five-sixths 2r100000000100000000100000000100000000]
-    (Long/bitCount (bit-and (unchecked-subtract x (unchecked-multiply ones (Byte/toUnsignedLong key-byte)))
-                            (bit-and (bit-not x) two-five-sixths)))))
+        two-five-sixths 2r100000000100000000100000000100000000
+        idx (Long/bitCount (bit-and (unchecked-subtract x (unchecked-multiply ones (Byte/toUnsignedLong key-byte)))
+                                    (bit-and (bit-not x) two-five-sixths)))]
+    (if (and (< idx size) (= key-byte (aget keys idx)))
+      idx
+      (unchecked-subtract -1 (min idx size)))))
 
 (defn key-position-node16 ^long [^long size ^bytes keys ^long key-byte]
   (let [x1 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 54)
@@ -54,21 +58,19 @@
                    (Byte/toUnsignedLong (aget keys 15)))
         key-byte (Byte/toUnsignedLong key-byte)
         ones 2r000000001000000001000000001000000001000000001000000001000000001
-        two-five-sixths 2r100000000100000000100000000100000000100000000100000000100000000]
-    (+ (Long/bitCount (bit-and (unchecked-subtract x1 (unchecked-multiply ones key-byte))
-                               (bit-and (bit-not x1) two-five-sixths)))
-       (Long/bitCount (bit-and (unchecked-subtract x2 (unchecked-multiply ones key-byte))
-                               (bit-and (bit-not x2) two-five-sixths)))
-       (Long/bitCount (bit-and (unchecked-subtract x3 (unchecked-multiply 2r000000001000000001 key-byte))
-                               (bit-and (bit-not x3) 2r100000000100000000))))))
+        two-five-sixths 2r100000000100000000100000000100000000100000000100000000100000000
+        idx (+ (Long/bitCount (bit-and (unchecked-subtract x1 (unchecked-multiply ones key-byte))
+                                       (bit-and (bit-not x1) two-five-sixths)))
+               (Long/bitCount (bit-and (unchecked-subtract x2 (unchecked-multiply ones key-byte))
+                                       (bit-and (bit-not x2) two-five-sixths)))
+               (Long/bitCount (bit-and (unchecked-subtract x3 (unchecked-multiply 2r000000001000000001 key-byte))
+                                       (bit-and (bit-not x3) 2r100000000100000000))))]
+    (if (and (< idx size) (= key-byte (aget keys idx)))
+      idx
+      (unchecked-subtract -1 (min idx size)))))
 
 (defn key-position ^long [^long size ^bytes keys ^long key-byte]
   (Arrays/binarySearch keys 0 size (byte key-byte)))
-
-(defn lookup-helper [^long size keys ^objects nodes ^long key-byte]
-  (let [pos (key-position size keys key-byte)]
-    (when-not (neg? pos)
-      (aget nodes pos))))
 
 (defn make-gap [^long size ^long pos src dest]
   (System/arraycopy src pos dest (inc pos) (- size pos)))
@@ -104,7 +106,9 @@
 (defrecord Node4 [^long size ^bytes keys ^objects nodes ^bytes prefix]
   ARTNode
   (lookup [this key-byte]
-    (lookup-helper size keys nodes key-byte))
+    (let [pos (key-position-node4 size keys key-byte)]
+      (when-not (neg? pos)
+        (aget nodes pos))))
 
   (insert [this key-byte value]
     (insert-helper size keys nodes key-byte value ->Node4 empty-node16 prefix))
@@ -115,7 +119,9 @@
 (defrecord Node16 [^long size ^bytes keys ^objects nodes ^bytes prefix]
   ARTNode
   (lookup [this key-byte]
-    (lookup-helper size keys nodes key-byte))
+    (let [pos (key-position-node16 size keys key-byte)]
+      (when-not (neg? pos)
+        (aget nodes pos))))
 
   (insert [this key-byte value]
     (insert-helper size keys nodes key-byte value ->Node16 empty-node48 prefix))
@@ -171,9 +177,9 @@
   (prefix [this]
     prefix))
 
-(def empty-node4 (->Node4 0 (byte-array 4) (object-array 4) (byte-array 0)))
+(def empty-node4 (->Node4 0 (byte-array 4 (byte -1)) (object-array 4) (byte-array 0)))
 
-(def empty-node16 (->Node16 0 (byte-array 16) (object-array 16) (byte-array 0)))
+(def empty-node16 (->Node16 0 (byte-array 16 (byte -1)) (object-array 16) (byte-array 0)))
 
 (def empty-node48 (->Node48 0 (byte-array 256 (byte -1)) (object-array 48) (byte-array 0)))
 
