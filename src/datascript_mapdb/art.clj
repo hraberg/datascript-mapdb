@@ -18,7 +18,8 @@
   (^bytes prefix [this]))
 
 (defprotocol ARTBaseNode
-  (empty-larger-node [this])
+  (grow-node [this])
+  (make-node [this size bytes keys prefix])
   (key-position [this key-byte]))
 
 (defprotocol ARTKey
@@ -48,7 +49,7 @@
   (let [pos (long (key-position node key-byte))
         new-key? (neg? pos)]
     (if (and new-key? (= size (count keys)))
-      (insert (grow-helper size keys nodes (assoc (empty-larger-node node) :prefix prefix)) key-byte value)
+      (insert (grow-node node) key-byte value)
       (let [pos (cond-> pos
                   new-key? (-> inc Math/abs))
             new-keys (aclone keys)
@@ -56,12 +57,12 @@
         (when new-key?
           (make-gap size pos keys new-keys)
           (make-gap size pos nodes new-nodes))
-        (assoc node
-               :size (cond-> size
-                           new-key? inc)
-               :keys (doto new-keys (aset pos (byte key-byte)))
-               :nodes (doto new-nodes (aset pos value))
-               :prefix prefix)))))
+        (make-node node
+                   (cond-> size
+                     new-key? inc)
+                   (doto new-keys (aset pos (byte key-byte)))
+                   (doto new-nodes (aset pos value))
+                   prefix)))))
 
 (declare empty-node16 empty-node48 empty-node256)
 
@@ -79,8 +80,11 @@
     prefix)
 
   ARTBaseNode
-  (empty-larger-node [this]
-    empty-node16)
+  (make-node [this size keys nodes prefix]
+    (->Node4 size keys nodes prefix))
+
+  (grow-node [this]
+    (grow-helper size keys nodes (assoc empty-node16 :prefix prefix)))
 
   (key-position [this key-byte]
     (let [x (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 27)
@@ -109,8 +113,11 @@
     prefix)
 
   ARTBaseNode
-  (empty-larger-node [this]
-    empty-node48)
+  (make-node [this size keys nodes prefix]
+    (->Node16 size keys nodes prefix))
+
+  (grow-node [this]
+    (grow-helper size keys nodes (assoc empty-node48 :prefix prefix)))
 
   (key-position [this key-byte]
     (let [x1 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 54)
