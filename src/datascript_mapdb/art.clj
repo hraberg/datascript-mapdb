@@ -48,7 +48,7 @@
                      ^long key-byte value]
   (let [pos (long (key-position node key-byte))
         new-key? (neg? pos)]
-    (if (and new-key? (= size (count keys)))
+    (if (and new-key? (= size (alength keys)))
       (insert (grow-node node) key-byte value)
       (let [pos (cond-> pos
                   new-key? (-> inc Math/abs))
@@ -164,7 +164,7 @@
           pos (if new-key?
                 (byte size)
                 pos)]
-      (if (< pos (count nodes))
+      (if (< pos (alength nodes))
         (->Node48 (cond-> size
                     new-key? inc)
                   (doto (aclone key-index) (aset key-int pos))
@@ -172,7 +172,7 @@
                   prefix)
         (loop [key 0
                node (assoc empty-node256 :prefix prefix)]
-          (if (< key (count key-index))
+          (if (< key (alength key-index))
             (let [pos (aget key-index key)]
               (recur (inc key) (cond-> node
                                  (not (neg? pos)) (insert key (aget nodes pos)))))
@@ -226,14 +226,15 @@
   (instance? Leaf node))
 
 (defn common-prefix-length ^long [^bytes key-bytes ^bytes prefix ^long depth]
-  (loop [idx 0]
-    (if (and (< idx (count prefix))
-             (= (aget key-bytes (+ depth idx)) (aget prefix idx)))
-      (recur (inc idx))
-      idx)))
+  (let [prefix-length (alength prefix)]
+    (loop [idx 0]
+      (if (and (< idx prefix-length)
+               (= (aget key-bytes (+ depth idx)) (aget prefix idx)))
+        (recur (inc idx))
+        idx))))
 
 (defn key-bytes-to-str [^bytes key]
-  (String. key 0 (dec (count key)) "UTF-8"))
+  (String. key 0 (dec (alength key)) "UTF-8"))
 
 (defn key-bytes-to-long [^bytes key]
   (.getLong (ByteBuffer/wrap key)))
@@ -249,7 +250,7 @@
   String
   (to-key-bytes [this]
     (let [bytes (.getBytes this "UTF-8") ]
-      (Arrays/copyOf bytes (inc (count bytes)))))
+      (Arrays/copyOf bytes (inc (alength bytes)))))
 
   Long
   (to-key-bytes [this]
@@ -281,7 +282,7 @@
           (let [prefix (prefix node)
                 common-prefix-length (common-prefix-length key-bytes prefix depth)
                 depth (+ depth common-prefix-length)]
-            (when (= common-prefix-length (count prefix))
+            (when (= common-prefix-length (alength prefix))
               (recur (inc depth) (lookup node (aget key-bytes depth))))))))))
 
 (defn art-insert
@@ -293,7 +294,7 @@
         (let [prefix (prefix node)
               common-prefix-length (common-prefix-length key-bytes prefix depth)
               depth (+ depth common-prefix-length)]
-          (if (= common-prefix-length (count prefix))
+          (if (= common-prefix-length (alength prefix))
             (let [key-byte (aget key-bytes depth)
                   child (lookup node key-byte)
                   new-child (if (and child (not (leaf? child)))
@@ -306,5 +307,5 @@
                 (assoc :prefix (Arrays/copyOfRange prefix 0 common-prefix-length))
                 (insert (aget key-bytes depth) (->Leaf key-bytes value))
                 (insert (aget prefix common-prefix-length)
-                        (assoc node :prefix (Arrays/copyOfRange prefix (inc common-prefix-length) (count prefix))))))))
+                        (assoc node :prefix (Arrays/copyOfRange prefix (inc common-prefix-length) (alength prefix))))))))
       0 (or tree (art-make-tree))))))
