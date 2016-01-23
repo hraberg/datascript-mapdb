@@ -18,6 +18,7 @@
   (^bytes prefix [this]))
 
 (defprotocol ARTBaseNode
+  (empty-larger-node [this])
   (key-position [this key-byte]))
 
 (defprotocol ARTKey
@@ -43,11 +44,11 @@
       node)))
 
 (defn insert-helper [{:keys [^long size ^bytes keys ^objects nodes prefix] :as node}
-                     key-byte value make-node empty-larger-node]
+                     ^long key-byte value]
   (let [pos (long (key-position node key-byte))
         new-key? (neg? pos)]
     (if (and new-key? (= size (count keys)))
-      (insert (grow-helper size keys nodes (assoc empty-larger-node :prefix prefix)) key-byte value)
+      (insert (grow-helper size keys nodes (assoc (empty-larger-node node) :prefix prefix)) key-byte value)
       (let [pos (cond-> pos
                   new-key? (-> inc Math/abs))
             new-keys (aclone keys)
@@ -55,11 +56,12 @@
         (when new-key?
           (make-gap size pos keys new-keys)
           (make-gap size pos nodes new-nodes))
-        (make-node (cond-> size
-                     new-key? inc)
-                   (doto new-keys (aset pos (byte key-byte)))
-                   (doto new-nodes (aset pos value))
-                   prefix)))))
+        (assoc node
+               :size (cond-> size
+                           new-key? inc)
+               :keys (doto new-keys (aset pos (byte key-byte)))
+               :nodes (doto new-nodes (aset pos value))
+               :prefix prefix)))))
 
 (declare empty-node16 empty-node48 empty-node256)
 
@@ -71,12 +73,15 @@
         (aget nodes pos))))
 
   (insert [this key-byte value]
-    (insert-helper this key-byte value ->Node4 empty-node16))
+    (insert-helper this key-byte value))
 
   (prefix [this]
     prefix)
 
   ARTBaseNode
+  (empty-larger-node [this]
+    empty-node16)
+
   (key-position [this key-byte]
     (let [x (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 27)
                     (bit-shift-left (Byte/toUnsignedLong (aget keys 1)) 18)
@@ -98,12 +103,15 @@
         (aget nodes pos))))
 
   (insert [this key-byte value]
-    (insert-helper this key-byte value ->Node16 empty-node48))
+    (insert-helper this key-byte value))
 
   (prefix [this]
     prefix)
 
   ARTBaseNode
+  (empty-larger-node [this]
+    empty-node48)
+
   (key-position [this key-byte]
     (let [x1 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 54)
                      (bit-shift-left (Byte/toUnsignedLong (aget keys 1)) 45)
