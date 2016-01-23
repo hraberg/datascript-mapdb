@@ -17,6 +17,9 @@
   (insert [this key-byte value])
   (^bytes prefix [this]))
 
+(defprotocol ARTBaseNode
+  (key-position [this key-byte]))
+
 (defprotocol ARTKey
   (^bytes to-key-bytes [this]))
 
@@ -26,50 +29,7 @@
 ;; TODO: doesn't seem to be faster in practice?
 ;;       wire up in insert as well.
 
-(defn key-position-node4 ^long [^long size ^bytes keys ^long key-byte]
-  (let [x (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 27)
-                  (bit-shift-left (Byte/toUnsignedLong (aget keys 1)) 18)
-                  (bit-shift-left (Byte/toUnsignedLong (aget keys 2)) 9)
-                  (Byte/toUnsignedLong (aget keys 3)))
-        ones 2r000000001000000001000000001000000001
-        two-five-sixths 2r100000000100000000100000000100000000
-        idx (Long/bitCount (bit-and (unchecked-subtract x (unchecked-multiply ones (Byte/toUnsignedLong key-byte)))
-                                    (bit-and (bit-not x) two-five-sixths)))]
-    (if (and (< idx size) (= key-byte (aget keys idx)))
-      idx
-      (unchecked-subtract -1 (min idx size)))))
-
-(defn key-position-node16 ^long [^long size ^bytes keys ^long key-byte]
-  (let [x1 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 54)
-                   (bit-shift-left (Byte/toUnsignedLong (aget keys 1)) 45)
-                   (bit-shift-left (Byte/toUnsignedLong (aget keys 2)) 36)
-                   (bit-shift-left (Byte/toUnsignedLong (aget keys 3)) 27)
-                   (bit-shift-left (Byte/toUnsignedLong (aget keys 4)) 18)
-                   (bit-shift-left (Byte/toUnsignedLong (aget keys 5)) 9)
-                   (Byte/toUnsignedLong (aget keys 6)))
-        x2 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 7)) 54)
-                   (bit-shift-left (Byte/toUnsignedLong (aget keys 8)) 45)
-                   (bit-shift-left (Byte/toUnsignedLong (aget keys 9)) 36)
-                   (bit-shift-left (Byte/toUnsignedLong (aget keys 10)) 27)
-                   (bit-shift-left (Byte/toUnsignedLong (aget keys 11)) 18)
-                   (bit-shift-left (Byte/toUnsignedLong (aget keys 12)) 9)
-                   (Byte/toUnsignedLong (aget keys 13)))
-        x3 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 14)) 9)
-                   (Byte/toUnsignedLong (aget keys 15)))
-        key-byte (Byte/toUnsignedLong key-byte)
-        ones 2r000000001000000001000000001000000001000000001000000001000000001
-        two-five-sixths 2r100000000100000000100000000100000000100000000100000000100000000
-        idx (+ (Long/bitCount (bit-and (unchecked-subtract x1 (unchecked-multiply ones key-byte))
-                                       (bit-and (bit-not x1) two-five-sixths)))
-               (Long/bitCount (bit-and (unchecked-subtract x2 (unchecked-multiply ones key-byte))
-                                       (bit-and (bit-not x2) two-five-sixths)))
-               (Long/bitCount (bit-and (unchecked-subtract x3 (unchecked-multiply 2r000000001000000001 key-byte))
-                                       (bit-and (bit-not x3) 2r100000000100000000))))]
-    (if (and (< idx size) (= key-byte (aget keys idx)))
-      idx
-      (unchecked-subtract -1 (min idx size)))))
-
-(defn key-position ^long [^long size ^bytes keys ^long key-byte]
+(defn key-position-binary-search ^long [^long size ^bytes keys ^long key-byte]
   (Arrays/binarySearch keys 0 size (byte key-byte)))
 
 (defn make-gap [^long size ^long pos src dest]
@@ -82,9 +42,9 @@
       (recur (inc idx) (insert node (aget keys idx) (aget nodes idx)))
       node)))
 
-(defn insert-helper [size ^bytes keys ^objects nodes key-byte value make-node empty-larger-node prefix]
-  (let [size (long size)
-        pos (key-position size keys key-byte)
+(defn insert-helper [{:keys [^long size ^bytes keys ^objects nodes prefix] :as node}
+                     key-byte value make-node empty-larger-node]
+  (let [pos (long (key-position node key-byte))
         new-key? (neg? pos)]
     (if (and new-key? (= size (count keys)))
       (insert (grow-helper size keys nodes (assoc empty-larger-node :prefix prefix)) key-byte value)
@@ -106,28 +66,73 @@
 (defrecord Node4 [^long size ^bytes keys ^objects nodes ^bytes prefix]
   ARTNode
   (lookup [this key-byte]
-    (let [pos (key-position-node4 size keys key-byte)]
+    (let [pos (long (key-position this key-byte))]
       (when-not (neg? pos)
         (aget nodes pos))))
 
   (insert [this key-byte value]
-    (insert-helper size keys nodes key-byte value ->Node4 empty-node16 prefix))
+    (insert-helper this key-byte value ->Node4 empty-node16))
 
   (prefix [this]
-    prefix))
+    prefix)
+
+  ARTBaseNode
+  (key-position [this key-byte]
+    (let [x (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 27)
+                    (bit-shift-left (Byte/toUnsignedLong (aget keys 1)) 18)
+                    (bit-shift-left (Byte/toUnsignedLong (aget keys 2)) 9)
+                    (Byte/toUnsignedLong (aget keys 3)))
+          ones 2r000000001000000001000000001000000001
+          two-five-sixths 2r100000000100000000100000000100000000
+          idx (Long/bitCount (bit-and (unchecked-subtract x (unchecked-multiply ones (Byte/toUnsignedLong key-byte)))
+                                      (bit-and (bit-not x) two-five-sixths)))]
+      (if (and (< idx size) (= key-byte (aget keys idx)))
+        idx
+        (unchecked-subtract -1 (min idx size))))))
 
 (defrecord Node16 [^long size ^bytes keys ^objects nodes ^bytes prefix]
   ARTNode
   (lookup [this key-byte]
-    (let [pos (key-position-node16 size keys key-byte)]
+    (let [pos (long (key-position this key-byte))]
       (when-not (neg? pos)
         (aget nodes pos))))
 
   (insert [this key-byte value]
-    (insert-helper size keys nodes key-byte value ->Node16 empty-node48 prefix))
+    (insert-helper this key-byte value ->Node16 empty-node48))
 
   (prefix [this]
-    prefix))
+    prefix)
+
+  ARTBaseNode
+  (key-position [this key-byte]
+    (let [x1 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 54)
+                     (bit-shift-left (Byte/toUnsignedLong (aget keys 1)) 45)
+                     (bit-shift-left (Byte/toUnsignedLong (aget keys 2)) 36)
+                     (bit-shift-left (Byte/toUnsignedLong (aget keys 3)) 27)
+                     (bit-shift-left (Byte/toUnsignedLong (aget keys 4)) 18)
+                     (bit-shift-left (Byte/toUnsignedLong (aget keys 5)) 9)
+                     (Byte/toUnsignedLong (aget keys 6)))
+          x2 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 7)) 54)
+                     (bit-shift-left (Byte/toUnsignedLong (aget keys 8)) 45)
+                     (bit-shift-left (Byte/toUnsignedLong (aget keys 9)) 36)
+                     (bit-shift-left (Byte/toUnsignedLong (aget keys 10)) 27)
+                     (bit-shift-left (Byte/toUnsignedLong (aget keys 11)) 18)
+                     (bit-shift-left (Byte/toUnsignedLong (aget keys 12)) 9)
+                     (Byte/toUnsignedLong (aget keys 13)))
+          x3 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 14)) 9)
+                     (Byte/toUnsignedLong (aget keys 15)))
+          key-byte (Byte/toUnsignedLong key-byte)
+          ones 2r000000001000000001000000001000000001000000001000000001000000001
+          two-five-sixths 2r100000000100000000100000000100000000100000000100000000100000000
+          idx (+ (Long/bitCount (bit-and (unchecked-subtract x1 (unchecked-multiply ones key-byte))
+                                         (bit-and (bit-not x1) two-five-sixths)))
+                 (Long/bitCount (bit-and (unchecked-subtract x2 (unchecked-multiply ones key-byte))
+                                         (bit-and (bit-not x2) two-five-sixths)))
+                 (Long/bitCount (bit-and (unchecked-subtract x3 (unchecked-multiply 2r000000001000000001 key-byte))
+                                         (bit-and (bit-not x3) 2r100000000100000000))))]
+      (if (and (< idx size) (= key-byte (aget keys idx)))
+        idx
+        (unchecked-subtract -1 (min idx size))))))
 
 (defrecord Node48 [^long size ^bytes key-index ^objects nodes ^bytes prefix]
   ARTNode
