@@ -226,9 +226,9 @@
   (instance? Leaf node))
 
 (defn common-prefix-length ^long [^bytes key-bytes ^bytes prefix ^long depth]
-  (let [prefix-length (alength prefix)]
+  (let [max-length (min (- (alength key-bytes) depth) (alength prefix))]
     (loop [idx 0]
-      (if (and (< idx prefix-length)
+      (if (and (< idx max-length)
                (= (aget key-bytes (+ depth idx)) (aget prefix idx)))
         (recur (inc idx))
         idx))))
