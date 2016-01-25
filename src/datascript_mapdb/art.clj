@@ -19,20 +19,18 @@
 
 (defprotocol ARTBaseNode
   (grow-node [this])
-  (make-node [this size bytes keys prefix])
-  (key-position [this key-byte]))
+  (make-node [this size bytes keys prefix]))
 
 (defprotocol ARTKey
   (^bytes to-key-bytes [this]))
 
-;; Inspired by the SIMD version in the paper.
-;; See https://graphics.stanford.edu/~seander/bithacks.html#ZeroInWord
-;; This version uses 9 bit 'bytes' to support full bytes, 0-255.
-;; TODO: doesn't seem to be faster in practice?
-;;       wire up in insert as well.
-
-(defn key-position-binary-search ^long [^long size ^bytes keys ^long key-byte]
+(defn key-position ^long [^long size ^bytes keys ^long key-byte]
   (Arrays/binarySearch keys 0 size (byte key-byte)))
+
+(defn lookup-helper [^long size ^objects nodes ^bytes keys ^long key-byte]
+  (let [pos (key-position size keys key-byte)]
+    (when-not (neg? pos)
+      (aget nodes pos))))
 
 (defn make-gap [^long size ^long pos src dest]
   (System/arraycopy src pos dest (inc pos) (- size pos)))
@@ -46,7 +44,7 @@
 
 (defn insert-helper [{:keys [^long size ^bytes keys ^objects nodes prefix] :as node}
                      ^long key-byte value]
-  (let [pos (long (key-position node key-byte))
+  (let [pos (key-position size keys key-byte)
         new-key? (neg? pos)]
     (if (and new-key? (= size (alength keys)))
       (insert (grow-node node) key-byte value)
@@ -69,9 +67,7 @@
 (defrecord Node4 [^long size ^bytes keys ^objects nodes ^bytes prefix]
   ARTNode
   (lookup [this key-byte]
-    (let [pos (long (key-position this key-byte))]
-      (when-not (neg? pos)
-        (aget nodes pos))))
+    (lookup-helper size nodes keys key-byte))
 
   (insert [this key-byte value]
     (insert-helper this key-byte value))
@@ -84,27 +80,12 @@
     (->Node4 size keys nodes prefix))
 
   (grow-node [this]
-    (grow-helper size keys nodes (assoc empty-node16 :prefix prefix)))
-
-  (key-position [this key-byte]
-    (let [x (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 27)
-                    (bit-shift-left (Byte/toUnsignedLong (aget keys 1)) 18)
-                    (bit-shift-left (Byte/toUnsignedLong (aget keys 2)) 9)
-                    (Byte/toUnsignedLong (aget keys 3)))
-          ones 2r000000001000000001000000001000000001
-          two-five-sixths 2r100000000100000000100000000100000000
-          idx (Long/bitCount (bit-and (unchecked-subtract x (unchecked-multiply ones (Byte/toUnsignedLong key-byte)))
-                                      (bit-and (bit-not x) two-five-sixths)))]
-      (if (and (< idx size) (= key-byte (aget keys idx)))
-        idx
-        (unchecked-subtract -1 (min idx size))))))
+    (grow-helper size keys nodes (assoc empty-node16 :prefix prefix))))
 
 (defrecord Node16 [^long size ^bytes keys ^objects nodes ^bytes prefix]
   ARTNode
   (lookup [this key-byte]
-    (let [pos (long (key-position this key-byte))]
-      (when-not (neg? pos)
-        (aget nodes pos))))
+    (lookup-helper size nodes keys key-byte))
 
   (insert [this key-byte value]
     (insert-helper this key-byte value))
@@ -117,37 +98,7 @@
     (->Node16 size keys nodes prefix))
 
   (grow-node [this]
-    (grow-helper size keys nodes (assoc empty-node48 :prefix prefix)))
-
-  (key-position [this key-byte]
-    (let [x1 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 0)) 54)
-                     (bit-shift-left (Byte/toUnsignedLong (aget keys 1)) 45)
-                     (bit-shift-left (Byte/toUnsignedLong (aget keys 2)) 36)
-                     (bit-shift-left (Byte/toUnsignedLong (aget keys 3)) 27)
-                     (bit-shift-left (Byte/toUnsignedLong (aget keys 4)) 18)
-                     (bit-shift-left (Byte/toUnsignedLong (aget keys 5)) 9)
-                     (Byte/toUnsignedLong (aget keys 6)))
-          x2 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 7)) 54)
-                     (bit-shift-left (Byte/toUnsignedLong (aget keys 8)) 45)
-                     (bit-shift-left (Byte/toUnsignedLong (aget keys 9)) 36)
-                     (bit-shift-left (Byte/toUnsignedLong (aget keys 10)) 27)
-                     (bit-shift-left (Byte/toUnsignedLong (aget keys 11)) 18)
-                     (bit-shift-left (Byte/toUnsignedLong (aget keys 12)) 9)
-                     (Byte/toUnsignedLong (aget keys 13)))
-          x3 (bit-or (bit-shift-left (Byte/toUnsignedLong (aget keys 14)) 9)
-                     (Byte/toUnsignedLong (aget keys 15)))
-          key-byte (Byte/toUnsignedLong key-byte)
-          ones 2r000000001000000001000000001000000001000000001000000001000000001
-          two-five-sixths 2r100000000100000000100000000100000000100000000100000000100000000
-          idx (+ (Long/bitCount (bit-and (unchecked-subtract x1 (unchecked-multiply ones key-byte))
-                                         (bit-and (bit-not x1) two-five-sixths)))
-                 (Long/bitCount (bit-and (unchecked-subtract x2 (unchecked-multiply ones key-byte))
-                                         (bit-and (bit-not x2) two-five-sixths)))
-                 (Long/bitCount (bit-and (unchecked-subtract x3 (unchecked-multiply 2r000000001000000001 key-byte))
-                                         (bit-and (bit-not x3) 2r100000000100000000))))]
-      (if (and (< idx size) (= key-byte (aget keys idx)))
-        idx
-        (unchecked-subtract -1 (min idx size))))))
+    (grow-helper size keys nodes (assoc empty-node48 :prefix prefix))))
 
 (defrecord Node48 [^long size ^bytes key-index ^objects nodes ^bytes prefix]
   ARTNode
