@@ -15,7 +15,9 @@
 (defprotocol ARTNode
   (lookup [this key-byte])
   (insert [this key-byte value])
-  (^bytes prefix [this]))
+  (^bytes prefix [this])
+  (minimum [this])
+  (maximum [this]))
 
 (defprotocol ARTBaseNode
   (grow-node [this])
@@ -75,6 +77,12 @@
   (prefix [this]
     prefix)
 
+  (minimum [this]
+    (aget nodes 0))
+
+  (maximum [this]
+    (aget nodes (dec size)))
+
   ARTBaseNode
   (make-node [this size keys nodes prefix]
     (->Node4 size keys nodes prefix))
@@ -92,6 +100,12 @@
 
   (prefix [this]
     prefix)
+
+  (minimum [this]
+    (aget nodes 0))
+
+  (maximum [this]
+    (aget nodes (dec size)))
 
   ARTBaseNode
   (make-node [this size keys nodes prefix]
@@ -130,7 +144,19 @@
             (insert node key-byte value))))))
 
   (prefix [this]
-    prefix))
+    prefix)
+
+  (minimum [this]
+    (loop [idx 0]
+      (if-let [key-byte (aget key-index idx)]
+        (lookup this key-byte)
+        (recur (inc idx)))))
+
+  (maximum [this]
+    (loop [idx 255]
+      (if-let [key-byte (aget key-index idx)]
+        (lookup this key-byte)
+        (recur (dec idx))))))
 
 (defrecord Node256 [^long size ^objects nodes ^bytes prefix]
   ARTNode
@@ -146,7 +172,15 @@
                  prefix)))
 
   (prefix [this]
-    prefix))
+    prefix)
+
+  (minimum [this]
+    (loop [idx 0]
+      (or (aget nodes idx) (recur (inc idx)))))
+
+  (maximum [this]
+    (loop [idx 255]
+      (or (aget nodes idx) (recur (dec idx))))))
 
 (def empty-node4 (->Node4 0 (byte-array 4 (byte -1)) (object-array 4) (byte-array 0)))
 
@@ -260,3 +294,13 @@
                 (insert (aget prefix common-prefix-length)
                         (assoc node :prefix (Arrays/copyOfRange prefix (inc common-prefix-length) (alength prefix))))))))
       0 (or tree (art-make-tree))))))
+
+(defn art-minimum [tree]
+  (if (leaf? tree)
+    (.value ^Leaf tree)
+    (recur (minimum tree))))
+
+(defn art-maximum [tree]
+  (if (leaf? tree)
+    (.value ^Leaf tree)
+    (recur (maximum tree))))

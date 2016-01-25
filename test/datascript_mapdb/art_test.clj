@@ -42,10 +42,12 @@
       line-seq))
 
 (deftest uuids
-  (let [uuids (read-lines "uuid.txt")]
+  (let [uuids (read-lines "uuid.txt")
+        tree (insert-all uuids)]
     (is (= 100000 (count uuids)))
-    (is (= uuids (-> (insert-all uuids)
-                     (lookup-all uuids))))))
+    (is (= uuids (lookup-all tree uuids)))
+    (is (= "00026bda-e0ea-4cda-8245-522764e9f325" (art/art-minimum tree)))
+    (is (= "ffffcb46-a92e-4822-82af-a7190f9c1ec5" (art/art-maximum tree)))))
 
 (def object-array-class (class (object-array 0)))
 
@@ -55,6 +57,9 @@
         counts (volatile! {})]
     (is (= 235886 (count words)))
     (is (= words (lookup-all tree words)))
+
+    (is (= "A" (art/art-minimum tree)))
+    (is (= "zythum" (art/art-maximum tree)))
 
     (w/prewalk #(do (when (record? %)
                       (vswap! counts update (.getSimpleName (class %)) (fnil inc 0)))
