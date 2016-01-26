@@ -153,7 +153,7 @@
         (recur (inc idx)))))
 
   (maximum [this]
-    (loop [idx 255]
+    (loop [idx (dec (alength key-index))]
       (if-let [key-byte (aget key-index idx)]
         (lookup this key-byte)
         (recur (dec idx))))))
@@ -179,7 +179,7 @@
       (or (aget nodes idx) (recur (inc idx)))))
 
   (maximum [this]
-    (loop [idx 255]
+    (loop [idx (dec (alength nodes))]
       (or (aget nodes idx) (recur (dec idx))))))
 
 (def empty-node4 (->Node4 0 (byte-array 4 (byte -1)) (object-array 4) (byte-array 0)))
